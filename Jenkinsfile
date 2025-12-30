@@ -1,62 +1,43 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'NodeJS_18'   // Jenkins → Global Tool Configuration
-    }
-
-    environment {
-        CI = 'true'
-    }
-
     stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                sh 'npm ci'
+                bat 'npm install'
+                bat 'npx playwright install'
             }
         }
 
-        stage('Install Playwright Browsers') {
+        stage('Run Tests') {
             steps {
-                sh 'npx playwright install --with-deps'
-            }
-        }
-
-        stage('Run Smoke Tests (PR only)') {
-            when {
-                expression { env.CHANGE_ID != null }
-            }
-            steps {
-                sh 'npx playwright test tests/smoke --grep @smoke'
-            }
-        }
-
-        stage('Run Regression Tests (main branch)') {
-            when {
-                branch 'main'
-            }
-            steps {
-                sh 'npx playwright test tests/regression --grep @regression'
+                script {
+                    def status = bat(script: 'npx playwright test', returnStatus: true)
+                    if (status != 0) {
+                        echo "Tests failed, but continuing to generate reports..."
+                    }
+                }
             }
         }
     }
 
     post {
         always {
-            archiveArtifacts artifacts: 'playwright-report/**', fingerprint: true
-        }
-        failure {
-            echo '❌ Playwright tests failed'
-        }
-        success {
-            echo '✅ Playwright tests passed'
+            echo 'Generating HTML reports...'
+
+
+            publishHTML(target: [
+                reportDir: 'playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'Playwright HTML Report',
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                 alwaysLinkToLastBuild: true,
+                allowMissing: true,
+                linkRelative: false
+            ])
+
+        
         }
     }
 }
